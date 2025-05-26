@@ -1,6 +1,7 @@
 from flask import Flask, request, jsonify
 import joblib
 import numpy as np
+import os  # Necesario para leer el puerto desde la variable de entorno
 
 app = Flask(__name__)
 
@@ -31,4 +32,10 @@ def predict():
     prediccion = model.predict(entrada)
 
     return jsonify({'Temperatura predicha (°C)': float(prediccion[0])})
+
+# Punto de entrada adaptado a Render
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 10000))  # Render define este puerto automáticamente
+    app.run(host='0.0.0.0', port=port)
+
 
