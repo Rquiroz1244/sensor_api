@@ -1,56 +1,36 @@
 from flask import Flask, request, jsonify
-import joblib
+import pickle
 import numpy as np
-import os
 import requests
-from datetime import datetime
 
 app = Flask(__name__)
 
-# Cargar modelo previamente entrenado
-model = joblib.load('modelo_rf_temperatura.pkl')
+# Cargar modelo
+with open('modelo_entrenado.pkl', 'rb') as file:
+    modelo = pickle.load(file)
 
-# Ruta de prueba
-@app.route('/')
-def home():
-    return "✅ API de predicción de temperatura funcionando"
-
-# Ruta de predicción
 @app.route('/predict', methods=['POST'])
 def predict():
-    data = request.get_json()
-
-    # Validación de datos
-    if data is None:
-        return jsonify({'error': 'No se recibió JSON válido'}), 400
-
-    humedad = data.get('Humedad')
-    luz = data.get('Luminosidad')
-
-    if humedad is None or luz is None:
-        return jsonify({'error': 'Faltan Humedad o Luminosidad'}), 400
-
-    entrada = np.array([[humedad, luz]])
-    prediccion = model.predict(entrada)
-    resultado = float(prediccion[0])
-
-    # Enviar a Pipedream
-    webhook_url = "https://eospwhnsj9uhnwv.m.pipedream.net"
-    payload = {
-        "fecha": datetime.now().isoformat(),
-        "humedad": humedad,
-        "luz": luz,
-        "temperatura_predicha": resultado
-    }
-
     try:
-        requests.post(webhook_url, json=payload, timeout=3)
+        data = request.get_json()
+        humedad = float(data['Humedad'])
+        luz = float(data['Luminosidad'])
+        
+        entrada = np.array([[humedad, luz]])
+        prediccion = modelo.predict(entrada)[0]
+
+        resultado = {"Temperatura predicha (℃)": round(prediccion, 2)}
+        
+        # Enviar a webhook de Pipedream
+        requests.post(
+            "https://eospwhnsj9uhnwv.m.pipedream.net",
+            json={
+                "humedad": humedad,
+                "luz": luz,
+                "temperatura": round(prediccion, 2)
+            }
+        )
+
+        return jsonify(resultado), 200
     except Exception as e:
-        print(f"Error enviando a Pipedream: {e}")
-
-    return jsonify({'Temperatura predicha (°C)': resultado})
-
-# Adaptado para Render
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 10000))
-    app.run(host='0.0.0.0', port=port)
+        return jsonify({"error": str(e)}), 500
